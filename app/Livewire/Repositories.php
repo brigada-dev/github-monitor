@@ -2,6 +2,7 @@
 
 namespace App\Livewire;
 
+use App\Models\FavoriteRepository;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Cache;
 use Livewire\Component;
@@ -16,28 +17,57 @@ class Repositories extends Component
     public $page = 1;
     public $errorMessage = null; // To handle errors
     public $isLastPage = false; // Flag to check if it's the last page
+    public $favoriteRepositories = [];
+    public $githubToken; // Temporarily hold the GitHub token
 
-    public function updatingSearch()
+    public function mount()
     {
-        $this->resetPage();
+        $user = auth()->user();
+
+        // Load the GitHub token from user details
+        $this->githubToken = $user->getDetail('github_token');
+
+        if (!$this->githubToken) {
+            $this->errorMessage = "GitHub token is missing. Please provide your token.";
+        }
+
+        // Load favorite repositories
+        $this->favoriteRepositories = FavoriteRepository::where('user_id', auth()->id())
+            ->pluck('repository_name')
+            ->toArray();
+    }
+
+    public function setGitHubToken()
+    {
+        $user = auth()->user();
+
+        // Save or update the GitHub token
+        $user->upsertDetail('github_token', $this->githubToken);
+
+        $this->errorMessage = null; // Clear any previous error message
+        $this->dispatch('token-saved', ['message' => 'GitHub token saved successfully!']);
     }
 
     public function fetchRepositories()
     {
+        if (!$this->githubToken) {
+            $this->errorMessage = "GitHub token is missing. Please provide your token.";
+            return collect();
+        }
+
         $cacheKey = "repositories_page_{$this->page}_per_page_{$this->perPage}";
 
-        // Fetch repositories from cache or API
         $repositories = Cache::remember($cacheKey, 3600, function () {
             try {
                 $url = "https://api.github.com/user/repos";
-                $response = Http::withToken(env('GITHUB_TOKEN'))
+                $response = Http::withToken($this->githubToken)
                     ->get($url, [
                         'per_page' => $this->perPage,
                         'page' => $this->page,
                     ]);
 
                 if ($response->failed()) {
-                    $this->errorMessage = "Failed to fetch repositories. Please try again.";
+                    $this->errorMessage = "Failed to fetch repositories. Please check your GitHub token.";
                     return collect();
                 }
 
@@ -48,16 +78,13 @@ class Repositories extends Component
             }
         });
 
-        // Apply search filter
         if ($this->search) {
             $repositories = $repositories->filter(function ($repo) {
                 return str_contains(strtolower($repo['name']), strtolower($this->search));
             });
         }
 
-        // Recalculate isLastPage dynamically
         $this->checkIfLastPage();
-
         return $repositories->values();
     }
 
@@ -65,7 +92,7 @@ class Repositories extends Component
     {
         try {
             $url = "https://api.github.com/user/repos";
-            $response = Http::withToken(env('GITHUB_TOKEN'))
+            $response = Http::withToken($this->githubToken)
                 ->get($url, [
                     'per_page' => $this->perPage,
                     'page' => $this->page + 1, // Check the next page

@@ -64,4 +64,35 @@ class User extends Authenticatable
             'password' => 'hashed',
         ];
     }
+
+    public function details()
+    {
+        return $this->hasMany(UserDetail::class);
+    }
+
+    /**
+     * Add or update a user detail by key.
+     *
+     * @param string $key
+     * @param string $value
+     * @return void
+     */
+    public function upsertDetail(string $key, string $value): void
+    {
+        $this->details()->updateOrCreate(
+            ['key' => $key],
+            ['value' => $value]
+        );
+    }
+
+    /**
+     * Retrieve a user detail by key.
+     *
+     * @param string $key
+     * @return string|null
+     */
+    public function getDetail(string $key): ?string
+    {
+        return $this->details()->where('key', $key)->value('value');
+    }
 }
