@@ -46,8 +46,11 @@ class Repositories extends Component
         $this->showModal = true;
     }
 
-    public function toggleFavorite()
+    public function toggleFavorite($repo = null)
     {
+        if($repo != null){
+            $this->selectedRepository = $repo;
+        }
         if (!$this->selectedRepository) {
             $this->errorMessage = "No repository selected.";
             return;

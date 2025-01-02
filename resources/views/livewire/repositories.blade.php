@@ -60,7 +60,7 @@
                         <span class="ml-4">🍴 {{ $repo['forks_count'] ?? 0 }} Forks</span>
                     </div>
                     <button
-                        wire:click="showNotificationModal('{{ $full_name_repo }}')"
+                        wire:click="{{ \App\Models\FavoriteRepository::where('repository_name', $full_name_repo)->where('user_id', auth()->id())->exists() ? "toggleFavorite('$full_name_repo')" : "showNotificationModal('$full_name_repo')" }}"
                         class="mt-4 px-4 py-2 text-white rounded-lg {{ $isFavorite ? 'bg-red-500' : 'bg-green-500' }}"
                     >
                         {{ $isFavorite ? 'Unfavorite' : 'Favorite' }}
