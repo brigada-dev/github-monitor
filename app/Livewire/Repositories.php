@@ -19,7 +19,7 @@ class Repositories extends Component
     public $isLastPage = false;
     public $favoriteRepositories = [];
     public $githubToken;
-    public $notificationMethod = 'email'; 
+    public $notificationMethod = 'email';
     public $notificationOptions = ['email', 'discord', 'slack'];
 
     public $showModal = false;

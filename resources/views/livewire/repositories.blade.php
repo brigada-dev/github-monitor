@@ -45,7 +45,7 @@
                     $full_name_repo = $repo['full_name'];
                     $isFavorite = in_array($full_name_repo, $favoriteRepositories);
                 @endphp
-                <div class="bg-gray-50 border border-gray-200 rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow">
+                <div class="bg-gray-50 border border-gray-200 rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow flex flex-col justify-between">
                     <a
                         href="{{ route('commits', ['owner' => explode('/', $full_name_repo)[0], 'repo_name' => explode('/', $full_name_repo)[1]]) }}"
                         class="text-blue-600 text-lg font-semibold hover:underline"
