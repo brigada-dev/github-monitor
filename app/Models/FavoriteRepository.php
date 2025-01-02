@@ -13,6 +13,7 @@ class FavoriteRepository extends Model
         'user_id',
         'repository_name',
         'notification_method',
+        'notification_trigger'
     ];
 
     public function user()

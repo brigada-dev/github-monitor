@@ -29,10 +29,20 @@ class Repositories extends Component
     ];
 
     protected $rules = [
-        'notificationDetails.email' => 'required_if:notificationMethod,email|email',
-        'notificationDetails.discord' => 'required_if:notificationMethod,discord|url',
-        'notificationDetails.slack' => 'required_if:notificationMethod,slack|url',
+        'notificationTrigger' => 'required|string|email:rfc,dns|url', // General structure; will adjust dynamically
     ];
+
+    protected function getValidationRules()
+    {
+        return [
+            'notificationTrigger' => match ($this->notificationMethod) {
+                'email' => 'required|email',
+                'discord', 'slack' => 'required|url',
+                default => 'required|string',
+            },
+        ];
+    }
+
 
     public $showModal = false;
     public $selectedRepository = null;
@@ -58,10 +68,13 @@ class Repositories extends Component
         $this->showModal = true;
     }
 
-    public function toggleFavorite()
+    public function toggleFavorite($full_name_repo = null)
     {
-        $this->validate();
-
+        if($full_name_repo != null) {
+            $this->selectedRepository = $full_name_repo;
+        }else{
+            $this->validate($this->getValidationRules());
+        }
         if (!$this->selectedRepository) {
             $this->errorMessage = "No repository selected.";
             return;
