@@ -19,6 +19,12 @@ class Repositories extends Component
     public $isLastPage = false;
     public $favoriteRepositories = [];
     public $githubToken;
+    public $notificationMethod = 'email'; // Default notification method
+    public $notificationOptions = ['email', 'discord', 'slack']; // Available options
+
+    // Modal-related properties
+    public $showModal = false;
+    public $selectedRepository = null;
 
     public function mount()
     {
@@ -35,23 +41,37 @@ class Repositories extends Component
             ->toArray();
     }
 
-    public function toggleFavorite($repositoryName)
+    public function showNotificationModal($repositoryName)
     {
+        $this->selectedRepository = $repositoryName;
+        $this->showModal = true;
+    }
+
+    public function toggleFavorite()
+    {
+        if (!$this->selectedRepository) {
+            $this->errorMessage = "No repository selected.";
+            return;
+        }
+
         $favorite = FavoriteRepository::where('user_id', auth()->id())
-            ->where('repository_name', $repositoryName)
+            ->where('repository_name', $this->selectedRepository)
             ->first();
 
         if ($favorite) {
             $favorite->delete();
-            $this->favoriteRepositories = array_diff($this->favoriteRepositories, [$repositoryName]);
+            $this->favoriteRepositories = array_diff($this->favoriteRepositories, [$this->selectedRepository]);
         } else {
             FavoriteRepository::create([
                 'user_id' => auth()->id(),
-                'repository_name' => $repositoryName,
-                'notification_method' => 'slack',
+                'repository_name' => $this->selectedRepository,
+                'notification_method' => $this->notificationMethod,
             ]);
-            $this->favoriteRepositories[] = $repositoryName;
+            $this->favoriteRepositories[] = $this->selectedRepository;
         }
+
+        $this->showModal = false; // Close the modal
+        $this->selectedRepository = null; // Reset selection
     }
 
     public function setGitHubToken()
@@ -116,7 +136,7 @@ class Repositories extends Component
 
             $this->isLastPage = $response->json() === [];
         } catch (\Exception $e) {
-            $this->isLastPage = true; 
+            $this->isLastPage = true;
         }
     }
 
@@ -142,6 +162,7 @@ class Repositories extends Component
             'repositories' => $repositories,
             'errorMessage' => $this->errorMessage,
             'isLastPage' => $this->isLastPage,
+            'favoriteRepositories' => $this->favoriteRepositories
         ]);
     }
 }
