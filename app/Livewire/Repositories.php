@@ -19,10 +19,9 @@ class Repositories extends Component
     public $isLastPage = false;
     public $favoriteRepositories = [];
     public $githubToken;
-    public $notificationMethod = 'email'; // Default notification method
-    public $notificationOptions = ['email', 'discord', 'slack']; // Available options
+    public $notificationMethod = 'email'; 
+    public $notificationOptions = ['email', 'discord', 'slack'];
 
-    // Modal-related properties
     public $showModal = false;
     public $selectedRepository = null;
 
@@ -70,8 +69,8 @@ class Repositories extends Component
             $this->favoriteRepositories[] = $this->selectedRepository;
         }
 
-        $this->showModal = false; // Close the modal
-        $this->selectedRepository = null; // Reset selection
+        $this->showModal = false;
+        $this->selectedRepository = null;
     }
 
     public function setGitHubToken()
