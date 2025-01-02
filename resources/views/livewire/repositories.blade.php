@@ -36,7 +36,7 @@
     </div>
 
     <!-- Loader -->
-    <x-loading />
+    <x-loading wire:except="showNotificationModal"/>
 
     @if ($repositories->isNotEmpty())
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -93,16 +93,16 @@
         </div>
     @endif
 
-    <!-- Modal -->
     @if ($showModal)
         <div class="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
             <div class="bg-white rounded-lg shadow-lg p-6 w-1/3">
                 <h2 class="text-lg font-semibold text-gray-800 mb-4">Select Notification Method</h2>
 
+                <!-- Notification Method Dropdown -->
                 <label for="notificationMethod" class="block text-sm font-medium text-gray-700 mb-2">Notification Method</label>
                 <select
                     id="notificationMethod"
-                    wire:model="notificationMethod"
+                    wire:model.live="notificationMethod"
                     class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
                 >
                     @foreach ($notificationOptions as $option)
@@ -110,6 +110,35 @@
                     @endforeach
                 </select>
 
+                <!-- Notification Trigger Input -->
+                <div class="mt-4">
+                    <label for="notificationTrigger" class="block text-sm font-medium text-gray-700">
+                        {{ ucfirst($notificationMethod) }} Address/URL
+                    </label>
+                    <input
+                        id="notificationTrigger"
+                        type="text"
+                        wire:model="notificationTrigger"
+                        class="block w-full mt-1 border-gray-300 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                        placeholder="Enter your {{ $notificationMethod }} address or URL"
+                    />
+                    @error('notificationTrigger')
+                    <span class="text-red-600 text-sm">{{ $message }}</span>
+                    @enderror
+                    <p class="text-sm text-gray-500 mt-2">
+                        @if ($notificationMethod === 'email')
+                            Please enter the email address where you want to receive notifications about this repository.
+                        @elseif ($notificationMethod === 'discord')
+                            Provide the Discord webhook URL where notifications about this repository will be sent.
+                        @elseif ($notificationMethod === 'slack')
+                            Enter the Slack webhook URL to receive repository notifications directly in your Slack channel.
+                        @else
+                            Select a valid notification method to proceed.
+                        @endif
+                    </p>
+                </div>
+
+                <!-- Modal Buttons -->
                 <div class="mt-6 flex justify-end">
                     <button
                         wire:click="$set('showModal', false)"

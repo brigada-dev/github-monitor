@@ -21,6 +21,18 @@ class Repositories extends Component
     public $githubToken;
     public $notificationMethod = 'email';
     public $notificationOptions = ['email', 'discord', 'slack'];
+    public $notificationTrigger = '';
+    public $notificationDetails = [
+        'email' => '',
+        'discord' => '',
+        'slack' => '',
+    ];
+
+    protected $rules = [
+        'notificationDetails.email' => 'required_if:notificationMethod,email|email',
+        'notificationDetails.discord' => 'required_if:notificationMethod,discord|url',
+        'notificationDetails.slack' => 'required_if:notificationMethod,slack|url',
+    ];
 
     public $showModal = false;
     public $selectedRepository = null;
@@ -46,11 +58,10 @@ class Repositories extends Component
         $this->showModal = true;
     }
 
-    public function toggleFavorite($repo = null)
+    public function toggleFavorite()
     {
-        if($repo != null){
-            $this->selectedRepository = $repo;
-        }
+        $this->validate();
+
         if (!$this->selectedRepository) {
             $this->errorMessage = "No repository selected.";
             return;
@@ -68,12 +79,19 @@ class Repositories extends Component
                 'user_id' => auth()->id(),
                 'repository_name' => $this->selectedRepository,
                 'notification_method' => $this->notificationMethod,
+                'notification_trigger' => $this->notificationTrigger,
             ]);
             $this->favoriteRepositories[] = $this->selectedRepository;
         }
 
+        $this->resetInputFields();
         $this->showModal = false;
         $this->selectedRepository = null;
+    }
+
+    public function resetInputFields()
+    {
+        $this->notificationTrigger = '';
     }
 
     public function setGitHubToken()
