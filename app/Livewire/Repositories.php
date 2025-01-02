@@ -15,36 +15,52 @@ class Repositories extends Component
     public $search = '';
     public $perPage = 9;
     public $page = 1;
-    public $errorMessage = null; // To handle errors
-    public $isLastPage = false; // Flag to check if it's the last page
+    public $errorMessage = null;
+    public $isLastPage = false;
     public $favoriteRepositories = [];
-    public $githubToken; // Temporarily hold the GitHub token
+    public $githubToken;
 
     public function mount()
     {
         $user = auth()->user();
 
-        // Load the GitHub token from user details
         $this->githubToken = $user->getDetail('github_token');
 
         if (!$this->githubToken) {
             $this->errorMessage = "GitHub token is missing. Please provide your token.";
         }
 
-        // Load favorite repositories
         $this->favoriteRepositories = FavoriteRepository::where('user_id', auth()->id())
             ->pluck('repository_name')
             ->toArray();
+    }
+
+    public function toggleFavorite($repositoryName)
+    {
+        $favorite = FavoriteRepository::where('user_id', auth()->id())
+            ->where('repository_name', $repositoryName)
+            ->first();
+
+        if ($favorite) {
+            $favorite->delete();
+            $this->favoriteRepositories = array_diff($this->favoriteRepositories, [$repositoryName]);
+        } else {
+            FavoriteRepository::create([
+                'user_id' => auth()->id(),
+                'repository_name' => $repositoryName,
+                'notification_method' => 'slack',
+            ]);
+            $this->favoriteRepositories[] = $repositoryName;
+        }
     }
 
     public function setGitHubToken()
     {
         $user = auth()->user();
 
-        // Save or update the GitHub token
         $user->upsertDetail('github_token', $this->githubToken);
 
-        $this->errorMessage = null; // Clear any previous error message
+        $this->errorMessage = null;
         $this->dispatch('token-saved', ['message' => 'GitHub token saved successfully!']);
     }
 
@@ -95,12 +111,12 @@ class Repositories extends Component
             $response = Http::withToken($this->githubToken)
                 ->get($url, [
                     'per_page' => $this->perPage,
-                    'page' => $this->page + 1, // Check the next page
+                    'page' => $this->page + 1,
                 ]);
 
             $this->isLastPage = $response->json() === [];
         } catch (\Exception $e) {
-            $this->isLastPage = true; // Assume it's the last page on error
+            $this->isLastPage = true; 
         }
     }
 
