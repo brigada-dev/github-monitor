@@ -5,21 +5,38 @@ namespace App\Notifications;
 use Illuminate\Bus\Queueable;
 use Illuminate\Notifications\Notification;
 use Illuminate\Notifications\Messages\SlackMessage;
+use Illuminate\Notifications\Messages\MailMessage;
 
 class RepositoryCommitsNotification extends Notification
 {
     use Queueable;
 
     private $data;
+    private $method;
 
-    public function __construct($data)
+    public function __construct($data, $method)
     {
         $this->data = $data;
+        $this->method = $method;
     }
 
     public function via($notifiable)
     {
-        return ['slack'];
+        return [$this->method];
+    }
+
+    public function toMail($notifiable)
+    {
+        $contributorsList = collect($this->data['contributors'])->map(function ($contributor) {
+            return "{$contributor['author']}: {$contributor['commit_count']} commits";
+        })->implode("\n");
+
+        return (new MailMessage)
+            ->subject("Daily Report for Repository: {$this->data['repository_name']}")
+            ->line("Commits Today: {$this->data['commit_count']}")
+            ->line("Contributors:")
+            ->line($contributorsList)
+            ->action('View Repository', "https://github.com/{$this->data['repository_name']}");
     }
 
     public function toSlack($notifiable)
@@ -37,5 +54,26 @@ class RepositoryCommitsNotification extends Notification
                         'Contributors' => $contributorsList,
                     ]);
             });
+    }
+
+    public function toDiscord($notifiable)
+    {
+        $contributorsList = collect($this->data['contributors'])->map(function ($contributor) {
+            return "{$contributor['author']}: {$contributor['commit_count']} commits";
+        })->implode("\n");
+
+        return [
+            'content' => "Daily Report for Repository: **{$this->data['repository_name']}**",
+            'embeds' => [
+                [
+                    'title' => 'View Repository',
+                    'url' => "https://github.com/{$this->data['repository_name']}",
+                    'fields' => [
+                        ['name' => 'Commits Today', 'value' => $this->data['commit_count']],
+                        ['name' => 'Contributors', 'value' => $contributorsList],
+                    ],
+                ],
+            ],
+        ];
     }
 }

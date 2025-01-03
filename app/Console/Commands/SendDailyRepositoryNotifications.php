@@ -13,17 +13,16 @@ use Carbon\Carbon;
 class SendDailyRepositoryNotifications extends Command
 {
     protected $signature = 'repositories:send-daily-notifications';
-    protected $description = 'Send daily Slack notifications for favorite repositories';
+    protected $description = 'Send daily notifications for favorite repositories';
 
     public function handle()
     {
-        // Fetch all favorite repositories
         $favorites = FavoriteRepository::all();
 
         foreach ($favorites as $favorite) {
             $repositoryName = $favorite->repository_name;
             $commits = $this->getTodayCommits($repositoryName);
-            Log::info($commits);
+
             if (!empty($commits)) {
                 $contributors = $this->groupCommitsByContributor($commits);
 
@@ -33,9 +32,16 @@ class SendDailyRepositoryNotifications extends Command
                     'contributors' => $contributors,
                 ];
 
-                // Send Slack notification using the global webhook URL
-                Notification::route('slack', env('SLACK_WEBHOOK_URL'))
-                    ->notify(new RepositoryCommitsNotification($data));
+                $method = $favorite->notification_method;
+                $trigger = $favorite->notification_trigger;
+
+                if ($method === 'slack' || $method === 'discord') {
+                    Notification::route($method, $trigger)
+                        ->notify(new RepositoryCommitsNotification($data, $method));
+                } elseif ($method === 'email') {
+                    Notification::route('mail', $trigger)
+                        ->notify(new RepositoryCommitsNotification($data, 'mail'));
+                }
             }
         }
 
@@ -48,13 +54,13 @@ class SendDailyRepositoryNotifications extends Command
             $today = Carbon::now()->toDateString();
             $response = Http::withToken(env('GITHUB_TOKEN'))
                 ->get("https://api.github.com/repos/{$repositoryName}/commits", [
-                    'since' => "{$today}T00:00:00Z", // Get commits since start of today
-                    'until' => "{$today}T23:59:59Z", // Get commits until end of today
+                    'since' => "{$today}T00:00:00Z",
+                    'until' => "{$today}T23:59:59Z",
                 ]);
 
             return $response->ok() ? $response->json() : [];
         } catch (\Exception $e) {
-            return [];
+            return $e->getMessage();
         }
     }
 
