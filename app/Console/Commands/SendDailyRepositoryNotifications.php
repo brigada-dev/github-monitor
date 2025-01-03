@@ -20,28 +20,16 @@ class SendDailyRepositoryNotifications extends Command
         $favorites = FavoriteRepository::all();
 
         foreach ($favorites as $favorite) {
-            $repositoryName = $favorite->repository_name;
-            $commits = $this->getTodayCommits($repositoryName);
+            $commits = $this->getTodayCommits($favorite->repository_name);
 
-            if (!empty($commits)) {
-                $contributors = $this->groupCommitsByContributor($commits);
-
+            if ($commits) {
                 $data = [
-                    'repository_name' => $repositoryName,
+                    'repository_name' => $favorite->repository_name,
                     'commit_count' => count($commits),
-                    'contributors' => $contributors,
+                    'contributors' => $this->groupCommitsByContributor($commits),
                 ];
 
-                $method = $favorite->notification_method;
-                $trigger = $favorite->notification_trigger;
-
-                if ($method === 'slack' || $method === 'discord') {
-                    Notification::route($method, $trigger)
-                        ->notify(new RepositoryCommitsNotification($data, $method));
-                } elseif ($method === 'email') {
-                    Notification::route('mail', $trigger)
-                        ->notify(new RepositoryCommitsNotification($data, 'mail'));
-                }
+                $this->sendNotification($favorite, $data);
             }
         }
 
@@ -51,32 +39,79 @@ class SendDailyRepositoryNotifications extends Command
     private function getTodayCommits($repositoryName)
     {
         try {
-            $today = Carbon::now()->toDateString();
             $response = Http::withToken(env('GITHUB_TOKEN'))
                 ->get("https://api.github.com/repos/{$repositoryName}/commits", [
-                    'since' => "{$today}T00:00:00Z",
-                    'until' => "{$today}T23:59:59Z",
+                    'since' => Carbon::now('UTC')->startOfDay()->toIso8601String(),
+                    'until' => Carbon::now('UTC')->endOfDay()->toIso8601String(),
                 ]);
 
-            return $response->ok() ? $response->json() : [];
+            if ($response->failed()) {
+                Log::error("Failed to fetch commits for {$repositoryName}: {$response->body()}");
+                return [];
+            }
+
+            return $response->json();
         } catch (\Exception $e) {
-            return $e->getMessage();
+            Log::error("Error fetching commits for {$repositoryName}: {$e->getMessage()}");
+            return [];
         }
     }
 
     private function groupCommitsByContributor($commits)
     {
         return collect($commits)
-            ->groupBy(function ($commit) {
-                return $commit['commit']['author']['name'] ?? 'Unknown';
-            })
-            ->map(function ($commits, $author) {
-                return [
-                    'author' => $author,
-                    'commit_count' => count($commits),
-                ];
-            })
+            ->groupBy(fn($commit) => $commit['commit']['author']['name'] ?? 'Unknown')
+            ->map(fn($commits, $author) => [
+                'author' => $author,
+                'commit_count' => count($commits),
+            ])
             ->values()
             ->toArray();
+    }
+
+    private function sendNotification($favorite, $data)
+    {
+        $method = $favorite->notification_method;
+        $trigger = $favorite->notification_trigger;
+
+        if ($method === 'discord') {
+            $this->sendDiscordNotification($trigger, $data);
+        } else {
+            $channel = $method === 'email' ? 'mail' : $method;
+
+            Notification::route($channel, $trigger)
+                ->notify(new RepositoryCommitsNotification($data, $channel));
+        }
+    }
+
+    private function sendDiscordNotification($webhookUrl, $data)
+    {
+        $contributorsList = collect($data['contributors'])->map(function ($contributor) {
+            return "{$contributor['author']}: {$contributor['commit_count']} commits";
+        })->implode("\n");
+
+        $payload = [
+            'content' => "Daily Report for Repository: **{$data['repository_name']}**",
+            'embeds' => [
+                [
+                    'title' => 'View Repository',
+                    'url' => "https://github.com/{$data['repository_name']}",
+                    'fields' => [
+                        ['name' => 'Commits Today', 'value' => $data['commit_count']],
+                        ['name' => 'Contributors', 'value' => $contributorsList],
+                    ],
+                ],
+            ],
+        ];
+
+        try {
+            $response = Http::post($webhookUrl, $payload);
+
+            if ($response->failed()) {
+                Log::error("Failed to send Discord notification: {$response->body()}");
+            }
+        } catch (\Exception $e) {
+            Log::error("Error sending Discord notification: {$e->getMessage()}");
+        }
     }
 }

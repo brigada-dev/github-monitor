@@ -55,25 +55,4 @@ class RepositoryCommitsNotification extends Notification
                     ]);
             });
     }
-
-    public function toDiscord($notifiable)
-    {
-        $contributorsList = collect($this->data['contributors'])->map(function ($contributor) {
-            return "{$contributor['author']}: {$contributor['commit_count']} commits";
-        })->implode("\n");
-
-        return [
-            'content' => "Daily Report for Repository: **{$this->data['repository_name']}**",
-            'embeds' => [
-                [
-                    'title' => 'View Repository',
-                    'url' => "https://github.com/{$this->data['repository_name']}",
-                    'fields' => [
-                        ['name' => 'Commits Today', 'value' => $this->data['commit_count']],
-                        ['name' => 'Contributors', 'value' => $contributorsList],
-                    ],
-                ],
-            ],
-        ];
-    }
 }
