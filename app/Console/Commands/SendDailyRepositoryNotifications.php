@@ -22,15 +22,22 @@ class SendDailyRepositoryNotifications extends Command
         foreach ($favorites as $favorite) {
             $commits = $this->getTodayCommits($favorite->repository_name);
 
-            if ($commits) {
+            if (!empty($commits)) {
                 $data = [
                     'repository_name' => $favorite->repository_name,
                     'commit_count' => count($commits),
                     'contributors' => $this->groupCommitsByContributor($commits),
                 ];
-
-                $this->sendNotification($favorite, $data);
+            } else {
+                $data = [
+                    'repository_name' => $favorite->repository_name,
+                    'commit_count' => 0,
+                    'contributors' => [],
+                    'message' => "No commits were made to the repository today.",
+                ];
             }
+
+            $this->sendNotification($favorite, $data);
         }
 
         return 0;
@@ -91,17 +98,19 @@ class SendDailyRepositoryNotifications extends Command
         })->implode("\n");
 
         $payload = [
-            'content' => "Daily Report for Repository: **{$data['repository_name']}**",
-            'embeds' => [
+            'content' => $data['commit_count'] > 0
+                ? "Daily Report for Repository: **{$data['repository_name']}**"
+                : "No commits found for **{$data['repository_name']}** today.",
+            'embeds' => $data['commit_count'] > 0 ? [
                 [
                     'title' => 'View Repository',
                     'url' => "https://github.com/{$data['repository_name']}",
                     'fields' => [
                         ['name' => 'Commits Today', 'value' => $data['commit_count']],
-                        ['name' => 'Contributors', 'value' => $contributorsList],
+                        ['name' => 'Contributors', 'value' => $contributorsList ?: 'No contributors today'],
                     ],
                 ],
-            ],
+            ] : [],
         ];
 
         try {

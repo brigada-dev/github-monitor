@@ -27,15 +27,22 @@ class RepositoryCommitsNotification extends Notification
 
     public function toMail($notifiable)
     {
-        $contributorsList = collect($this->data['contributors'])->map(function ($contributor) {
-            return "{$contributor['author']}: {$contributor['commit_count']} commits";
-        })->implode("\n");
+        if ($this->data['commit_count'] > 0) {
+            $contributorsList = collect($this->data['contributors'])->map(function ($contributor) {
+                return "{$contributor['author']}: {$contributor['commit_count']} commits";
+            })->implode("\n");
+
+            return (new MailMessage)
+                ->subject("Daily Report for Repository: {$this->data['repository_name']}")
+                ->line("Commits Today: {$this->data['commit_count']}")
+                ->line("Contributors:")
+                ->line($contributorsList)
+                ->action('View Repository', "https://github.com/{$this->data['repository_name']}");
+        }
 
         return (new MailMessage)
             ->subject("Daily Report for Repository: {$this->data['repository_name']}")
-            ->line("Commits Today: {$this->data['commit_count']}")
-            ->line("Contributors:")
-            ->line($contributorsList)
+            ->line("No commits were made to the repository today.")
             ->action('View Repository', "https://github.com/{$this->data['repository_name']}");
     }
 
@@ -45,7 +52,7 @@ class RepositoryCommitsNotification extends Notification
             return "{$contributor['author']}: {$contributor['commit_count']} commits";
         })->implode("\n");
 
-        return (new SlackMessage)
+        return (new SlackMessage)->http(['verify'=> false])
             ->content("Daily Report for Repository: *{$this->data['repository_name']}*")
             ->attachment(function ($attachment) use ($contributorsList) {
                 $attachment->title('View Repository', "https://github.com/{$this->data['repository_name']}")
