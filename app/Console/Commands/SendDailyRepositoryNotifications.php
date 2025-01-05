@@ -20,22 +20,22 @@ class SendDailyRepositoryNotifications extends Command
         $favorites = FavoriteRepository::all();
 
         foreach ($favorites as $favorite) {
-            $branches = $favorite->branches ?? []; // Use specified branches or fetch from all
-            $commits = $this->getTodayCommits($favorite->repository_name, $branches);
+            $branches = $favorite->branches ?? [];
+            if (empty($branches)) {
+                $branches = $this->fetchAllBranches($favorite->repository_name);
+            }
 
-            if (!empty($commits)) {
+            $branchCommits = $this->getTodayCommits($favorite->repository_name, $branches);
+            if (empty($branchCommits)) {
                 $data = [
                     'repository_name' => $favorite->repository_name,
-                    'commit_count' => count($commits),
-                    'contributors' => $this->groupCommitsByContributor($commits),
+                    'total_commits'   => 0,
+                    'branch_data'     => [],
+                    'message'         => "No commits were made to this repository today.",
                 ];
             } else {
-                $data = [
-                    'repository_name' => $favorite->repository_name,
-                    'commit_count' => 0,
-                    'contributors' => [],
-                    'message' => "No commits were made to the specified branches today.",
-                ];
+                // Otherwise, construct a detailed summary of commits per branch
+                $data = $this->compileBranchData($favorite->repository_name, $branchCommits);
             }
 
             $this->sendNotification($favorite, $data);
@@ -44,31 +44,50 @@ class SendDailyRepositoryNotifications extends Command
         return 0;
     }
 
-    private function getTodayCommits($repositoryName, $branches = [])
+    /**
+     * Fetch all branches for a given repository (if no branches are specified).
+     */
+    private function fetchAllBranches($repositoryName)
     {
         try {
-            $allCommits = [];
+            $branchesResponse = Http::withToken(env('GITHUB_TOKEN'))
+                ->get("https://api.github.com/repos/{$repositoryName}/branches");
 
-            if (empty($branches)) {
-                // If no branches specified, fetch from the default branch
-                $branchesResponse = Http::withToken(env('GITHUB_TOKEN'))
-                    ->get("https://api.github.com/repos/{$repositoryName}/branches");
-
-                if ($branchesResponse->failed()) {
-                    Log::error("Failed to fetch branches for {$repositoryName}: {$branchesResponse->body()}");
-                    return [];
-                }
-
-                $branches = collect($branchesResponse->json())->pluck('name')->toArray();
+            if ($branchesResponse->failed()) {
+                Log::error("Failed to fetch branches for {$repositoryName}: {$branchesResponse->body()}");
+                return [];
             }
 
-            foreach ($branches as $branch) {
-                $response = Http::withToken(env('GITHUB_TOKEN'))
-                    ->get("https://api.github.com/repos/{$repositoryName}/commits", [
-                        'sha' => $branch,
-                        'since' => Carbon::now('UTC')->startOfDay()->toIso8601String(),
-                        'until' => Carbon::now('UTC')->endOfDay()->toIso8601String(),
-                    ]);
+            return collect($branchesResponse->json())->pluck('name')->toArray();
+        } catch (\Exception $e) {
+            Log::error("Error fetching branches for {$repositoryName}: {$e->getMessage()}");
+            return [];
+        }
+    }
+
+    /**
+     * Get all commits for "today" per branch.
+     *
+     * @return array  Example structure:
+     *               [
+     *                 'main' => [ {commit1}, {commit2}, ... ],
+     *                 'develop' => [ ... ],
+     *               ]
+     */
+    private function getTodayCommits($repositoryName, array $branches = [])
+    {
+        $branchCommits = [];
+
+        foreach ($branches as $branch) {
+            try {
+                $response = Http::withToken(env('GITHUB_TOKEN'))->get(
+                    "https://api.github.com/repos/{$repositoryName}/commits",
+                    [
+                        'sha'   => $branch,
+                        'since' => Carbon::now('UTC')->startOfMonth()->toIso8601String(),
+                        'until' => Carbon::now('UTC')->endOfMonth()->toIso8601String(),
+                    ]
+                );
 
                 if ($response->failed()) {
                     Log::error("Failed to fetch commits for {$repositoryName} on branch {$branch}: {$response->body()}");
@@ -76,29 +95,62 @@ class SendDailyRepositoryNotifications extends Command
                 }
 
                 $commits = $response->json();
-                $allCommits = array_merge($allCommits, $commits);
+                if (!empty($commits)) {
+                    $uniqueCommits = collect($commits)->unique('sha')->values()->toArray();
+                    $branchCommits[$branch] = $uniqueCommits;
+                }
+            } catch (\Exception $e) {
+                Log::error("Error fetching commits for {$repositoryName} on branch {$branch}: {$e->getMessage()}");
             }
-
-            // Deduplicate commits by SHA
-            return collect($allCommits)->unique('sha')->values()->toArray();
-        } catch (\Exception $e) {
-            Log::error("Error fetching commits for {$repositoryName}: {$e->getMessage()}");
-            return [];
         }
+
+        return $branchCommits;
     }
 
+    /**
+     * Build a nice summary of all branches and commits for the notification.
+     */
+    private function compileBranchData($repositoryName, array $branchCommits)
+    {
+        $branchData = [];
+        $totalCommits = 0;
+
+        foreach ($branchCommits as $branchName => $commits) {
+            $branchData[] = [
+                'branch_name' => $branchName,
+                'commit_count' => count($commits),
+                'contributors' => $this->groupCommitsByContributor($commits),
+                'commits' => $commits,
+            ];
+
+            $totalCommits += count($commits);
+        }
+
+        return [
+            'repository_name' => $repositoryName,
+            'total_commits'   => $totalCommits,
+            'branch_data'     => $branchData,
+        ];
+    }
+
+    /**
+     * Group commits by author/contributor.
+     */
     private function groupCommitsByContributor($commits)
     {
         return collect($commits)
             ->groupBy(fn($commit) => $commit['commit']['author']['name'] ?? 'Unknown')
             ->map(fn($commits, $author) => [
-                'author' => $author,
+                'author'       => $author,
                 'commit_count' => count($commits),
             ])
             ->values()
             ->toArray();
     }
 
+    /**
+     * Dispatch to the correct channel (Discord, Email, Slack, etc.)
+     */
     private function sendNotification($favorite, $data)
     {
         $method = $favorite->notification_method;
@@ -116,22 +168,29 @@ class SendDailyRepositoryNotifications extends Command
 
     private function sendDiscordNotification($webhookUrl, $data)
     {
-        $contributorsList = collect($data['contributors'])->map(function ($contributor) {
-            return "{$contributor['author']}: {$contributor['commit_count']} commits";
-        })->implode("\n");
+        $branchFields = [];
+        if (!empty($data['branch_data'])) {
+            foreach ($data['branch_data'] as $branchInfo) {
+                $contributorsList = collect($branchInfo['contributors'])->map(function ($contributor) {
+                    return "{$contributor['author']}: {$contributor['commit_count']} commits";
+                })->implode("\n");
+
+                $branchFields[] = [
+                    'name'  => "Branch: {$branchInfo['branch_name']}",
+                    'value' => "Commits: {$branchInfo['commit_count']}\n{$contributorsList}",
+                ];
+            }
+        }
 
         $payload = [
-            'content' => $data['commit_count'] > 0
-                ? "Daily Report for Repository: **{$data['repository_name']}**"
+            'content' => $data['total_commits'] > 0
+                ? "Daily Report for **{$data['repository_name']}**"
                 : "No commits found for **{$data['repository_name']}** today.",
-            'embeds' => $data['commit_count'] > 0 ? [
+            'embeds' => $data['total_commits'] > 0 ? [
                 [
-                    'title' => 'View Repository',
-                    'url' => "https://github.com/{$data['repository_name']}",
-                    'fields' => [
-                        ['name' => 'Commits Today', 'value' => $data['commit_count']],
-                        ['name' => 'Contributors', 'value' => $contributorsList ?: 'No contributors today'],
-                    ],
+                    'title'  => "View Repository: {$data['repository_name']}",
+                    'url'    => "https://github.com/{$data['repository_name']}",
+                    'fields' => $branchFields,
                 ],
             ] : [],
         ];
