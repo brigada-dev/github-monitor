@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Models\User;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -21,11 +22,12 @@ class SendDailyRepositoryNotifications extends Command
 
         foreach ($favorites as $favorite) {
             $branches = $favorite->branches ?? [];
+            $github_token = User::find($favorite->user_id)->getDetail('github_token');
             if (empty($branches)) {
-                $branches = $this->fetchAllBranches($favorite->repository_name);
+                $branches = $this->fetchAllBranches($favorite->repository_name,$github_token);
             }
 
-            $branchCommits = $this->getTodayCommits($favorite->repository_name, $branches);
+            $branchCommits = $this->getTodayCommits($favorite->repository_name, $branches,$github_token);
             if (empty($branchCommits)) {
                 $data = [
                     'repository_name' => $favorite->repository_name,
@@ -47,10 +49,10 @@ class SendDailyRepositoryNotifications extends Command
     /**
      * Fetch all branches for a given repository (if no branches are specified).
      */
-    private function fetchAllBranches($repositoryName)
+    private function fetchAllBranches($repositoryName,$githubToken)
     {
         try {
-            $branchesResponse = Http::withToken(env('GITHUB_TOKEN'))
+            $branchesResponse = Http::withToken($githubToken)
                 ->get("https://api.github.com/repos/{$repositoryName}/branches");
 
             if ($branchesResponse->failed()) {
@@ -74,13 +76,13 @@ class SendDailyRepositoryNotifications extends Command
      *                 'develop' => [ ... ],
      *               ]
      */
-    private function getTodayCommits($repositoryName, array $branches = [])
+    private function getTodayCommits($repositoryName, array $branches = [], $githubToken)
     {
         $branchCommits = [];
 
         foreach ($branches as $branch) {
             try {
-                $response = Http::withToken(env('GITHUB_TOKEN'))->get(
+                $response = Http::withToken($githubToken)->get(
                     "https://api.github.com/repos/{$repositoryName}/commits",
                     [
                         'sha'   => $branch,

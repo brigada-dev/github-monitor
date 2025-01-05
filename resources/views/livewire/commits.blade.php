@@ -1,4 +1,4 @@
-<div class="p-6">
+<div class="lg:p-6 p-4">
     <h1 class="text-2xl font-bold text-gray-800 mb-6">Commits for Repository: {{ $repoId }}</h1>
 
     <!-- Error Message -->

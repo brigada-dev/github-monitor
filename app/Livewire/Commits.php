@@ -2,6 +2,7 @@
 
 namespace App\Livewire;
 
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Cache;
 use Carbon\Carbon;
@@ -15,17 +16,19 @@ class Commits extends Component
     public $filterDate;
     public $contributors = [];
     public $errorMessage = null;
+    public $github_token = null;
 
     public function mount($owner, $repo_name)
     {
         $this->repoId = "{$owner}/{$repo_name}";
         $this->filterDate = Carbon::now()->toDateString();
+        $this->github_token = Auth::user()->getDetail('github_token');
     }
 
     public function fetchBranches()
     {
         try {
-            $response = Http::withToken(env('GITHUB_TOKEN'))
+            $response = Http::withToken($this->github_token)
                 ->get("https://api.github.com/repos/{$this->repoId}/branches");
 
             if ($response->ok()) {
@@ -55,7 +58,7 @@ class Commits extends Component
     private function fetchContributorsFromApi()
     {
         try {
-            $response = Http::withToken(env('GITHUB_TOKEN'))
+            $response = Http::withToken($this->github_token)
                 ->get("https://api.github.com/repos/{$this->repoId}/commits", [
                     'sha' => $this->branch,
                     'per_page' => 100,

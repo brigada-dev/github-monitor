@@ -1,4 +1,4 @@
-<div class="p-6">
+<div class="lg:p-6 p-4">
     <h1 class="text-2xl font-bold text-gray-800 mb-6">GitHub Repositories</h1>
     @if ($errorMessage)
         <div class="bg-red-100 text-red-800 p-3 rounded mb-6">
