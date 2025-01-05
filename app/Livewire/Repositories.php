@@ -22,6 +22,10 @@ class Repositories extends Component
     public $notificationMethod = 'email';
     public $notificationOptions = ['email', 'discord', 'slack'];
     public $notificationTrigger = '';
+    public $availableBranches = [];
+    public $selectedBranches = [];
+    public $showBranchesDropdown = false;
+
     public $notificationDetails = [
         'email' => '',
         'discord' => '',
@@ -38,9 +42,15 @@ class Repositories extends Component
             'notificationTrigger' => match ($this->notificationMethod) {
                 'email' => 'required|email',
                 'discord', 'slack' => 'required|url',
+                'selectedBranches' => 'required|array|min:1',
                 default => 'required|string',
             },
         ];
+    }
+
+    public function toggleBranchesDropdown()
+    {
+        $this->showBranchesDropdown = !$this->showBranchesDropdown;
     }
 
 
@@ -65,6 +75,7 @@ class Repositories extends Component
     public function showNotificationModal($repositoryName)
     {
         $this->selectedRepository = $repositoryName;
+        $this->fetchBranches($repositoryName);
         $this->showModal = true;
     }
 
@@ -93,6 +104,7 @@ class Repositories extends Component
                 'repository_name' => $this->selectedRepository,
                 'notification_method' => $this->notificationMethod,
                 'notification_trigger' => $this->notificationTrigger,
+                'branches' => $this->selectedBranches,
             ]);
             $this->favoriteRepositories[] = $this->selectedRepository;
         }
@@ -105,6 +117,8 @@ class Repositories extends Component
     public function resetInputFields()
     {
         $this->notificationTrigger = '';
+        $this->selectedBranches = [];
+        $this->availableBranches = [];
     }
 
     public function setGitHubToken()
@@ -115,6 +129,28 @@ class Repositories extends Component
 
         $this->errorMessage = null;
         $this->dispatch('token-saved', ['message' => 'GitHub token saved successfully!']);
+    }
+
+    public function fetchBranches($repositoryName)
+    {
+        if (!$this->githubToken) {
+            $this->errorMessage = "GitHub token is missing.";
+            return;
+        }
+
+        try {
+            $response = Http::withToken($this->githubToken)
+                ->get("https://api.github.com/repos/{$repositoryName}/branches");
+
+            if ($response->failed()) {
+                $this->errorMessage = "Failed to fetch branches for {$repositoryName}.";
+                return;
+            }
+
+            $this->availableBranches = collect($response->json())->pluck('name')->toArray();
+        } catch (\Exception $e) {
+            $this->errorMessage = "Error fetching branches for {$repositoryName}.";
+        }
     }
 
     public function fetchRepositories()
