@@ -20,7 +20,8 @@ class SendDailyRepositoryNotifications extends Command
         $favorites = FavoriteRepository::all();
 
         foreach ($favorites as $favorite) {
-            $commits = $this->getTodayCommits($favorite->repository_name);
+            $branches = $favorite->branches ?? []; // Use specified branches or fetch from all
+            $commits = $this->getTodayCommits($favorite->repository_name, $branches);
 
             if (!empty($commits)) {
                 $data = [
@@ -33,7 +34,7 @@ class SendDailyRepositoryNotifications extends Command
                     'repository_name' => $favorite->repository_name,
                     'commit_count' => 0,
                     'contributors' => [],
-                    'message' => "No commits were made to the repository today.",
+                    'message' => "No commits were made to the specified branches today.",
                 ];
             }
 
@@ -43,21 +44,43 @@ class SendDailyRepositoryNotifications extends Command
         return 0;
     }
 
-    private function getTodayCommits($repositoryName)
+    private function getTodayCommits($repositoryName, $branches = [])
     {
         try {
-            $response = Http::withToken(env('GITHUB_TOKEN'))
-                ->get("https://api.github.com/repos/{$repositoryName}/commits", [
-                    'since' => Carbon::now('UTC')->startOfDay()->toIso8601String(),
-                    'until' => Carbon::now('UTC')->endOfDay()->toIso8601String(),
-                ]);
+            $allCommits = [];
 
-            if ($response->failed()) {
-                Log::error("Failed to fetch commits for {$repositoryName}: {$response->body()}");
-                return [];
+            if (empty($branches)) {
+                // If no branches specified, fetch from the default branch
+                $branchesResponse = Http::withToken(env('GITHUB_TOKEN'))
+                    ->get("https://api.github.com/repos/{$repositoryName}/branches");
+
+                if ($branchesResponse->failed()) {
+                    Log::error("Failed to fetch branches for {$repositoryName}: {$branchesResponse->body()}");
+                    return [];
+                }
+
+                $branches = collect($branchesResponse->json())->pluck('name')->toArray();
             }
 
-            return $response->json();
+            foreach ($branches as $branch) {
+                $response = Http::withToken(env('GITHUB_TOKEN'))
+                    ->get("https://api.github.com/repos/{$repositoryName}/commits", [
+                        'sha' => $branch,
+                        'since' => Carbon::now('UTC')->startOfDay()->toIso8601String(),
+                        'until' => Carbon::now('UTC')->endOfDay()->toIso8601String(),
+                    ]);
+
+                if ($response->failed()) {
+                    Log::error("Failed to fetch commits for {$repositoryName} on branch {$branch}: {$response->body()}");
+                    continue;
+                }
+
+                $commits = $response->json();
+                $allCommits = array_merge($allCommits, $commits);
+            }
+
+            // Deduplicate commits by SHA
+            return collect($allCommits)->unique('sha')->values()->toArray();
         } catch (\Exception $e) {
             Log::error("Error fetching commits for {$repositoryName}: {$e->getMessage()}");
             return [];

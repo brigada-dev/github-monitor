@@ -17,6 +17,7 @@ return new class extends Migration
             $table->string('repository_name');
             $table->string('notification_method');
             $table->string('notification_trigger');
+            $table->json('branches');
             $table->timestamps();
             $table->foreign('user_id')->references('id')->on('users')->onDelete('cascade');
         });

@@ -13,7 +13,12 @@ class FavoriteRepository extends Model
         'user_id',
         'repository_name',
         'notification_method',
-        'notification_trigger'
+        'notification_trigger',
+        'branches'
+    ];
+
+    protected $casts = [
+        'branches' => 'array',
     ];
 
     public function user()
