@@ -121,6 +121,15 @@ class Repositories extends Component
         $this->availableBranches = [];
     }
 
+    public function toggleBranch($branch)
+    {
+        if (in_array($branch, $this->selectedBranches)) {
+            $this->selectedBranches = array_filter($this->selectedBranches, fn($b) => $b !== $branch);
+        } else {
+            $this->selectedBranches[] = $branch;
+        }
+    }
+
     public function setGitHubToken()
     {
         $user = auth()->user();

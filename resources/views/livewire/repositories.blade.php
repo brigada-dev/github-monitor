@@ -85,97 +85,99 @@
     @endif
 
     @if ($showModal)
-        <div class="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
-            <div class="bg-white rounded-lg shadow-lg p-6 w-1/3">
-                <h2 class="text-lg font-semibold text-gray-800 mb-4">Select Notification Method</h2>
-                <label for="notificationMethod" class="block text-sm font-medium text-gray-700 mb-2">Notification Method</label>
-                <select
-                    id="notificationMethod"
-                    wire:model.live="notificationMethod"
-                    class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                >
-                    @foreach ($notificationOptions as $option)
-                        <option value="{{ $option }}">{{ ucfirst($option) }}</option>
-                    @endforeach
-                </select>
-                <div class="mt-4">
-                    <label for="notificationTrigger" class="block text-sm font-medium text-gray-700">
-                        {{ ucfirst($notificationMethod) }} Address/URL
-                    </label>
-                    <input
-                        id="notificationTrigger"
-                        type="text"
-                        wire:model.defer="notificationTrigger"
-                        class="block w-full mt-1 border-gray-300 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-                        placeholder="Enter your {{ $notificationMethod }} address or URL"
-                    />
-                    @error('notificationTrigger')
-                    <span class="text-red-600 text-sm">{{ $message }}</span>
-                    @enderror
-                    <p class="text-sm text-gray-500 mt-2">
-                        @if ($notificationMethod === 'email')
-                            Please enter the email address where you want to receive notifications about this repository.
-                        @elseif ($notificationMethod === 'discord')
-                            Provide the Discord webhook URL where notifications about this repository will be sent.
-                        @elseif ($notificationMethod === 'slack')
-                            Enter the Slack webhook URL to receive repository notifications directly in your Slack channel.
-                        @else
-                            Select a valid notification method to proceed.
-                        @endif
-                    </p>
+        <div class="fixed inset-0 z-50 flex items-center justify-center bg-gray-900 bg-opacity-50" wire:click.self="$set('showModal', false)">
+            <div class="bg-white rounded-lg shadow-lg w-full max-w-lg p-6 relative">
+                <!-- Modal Header -->
+                <div class="flex justify-between items-center">
+                    <h2 class="text-lg font-semibold text-gray-800">Notification Settings</h2>
+                    <button wire:click="$set('showModal', false)" class="text-gray-400 hover:text-gray-600">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
                 </div>
+                <!-- Modal Body -->
                 <div class="mt-4">
-                    <label for="branches" class="block text-sm font-medium text-gray-700">Select Branches</label>
-                    <div class="relative mt-1">
-                        <div class="relative border border-gray-300 rounded-lg shadow-sm focus-within:ring focus-within:ring-indigo-500 focus-within:ring-opacity-50">
+                    <!-- Notification Method -->
+                    <label for="notificationMethod" class="block text-sm font-medium text-gray-700 mb-2">Notification Method</label>
+                    <select
+                        id="notificationMethod"
+                        wire:model="notificationMethod"
+                        class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                    >
+                        @foreach ($notificationOptions as $option)
+                            <option value="{{ $option }}">{{ ucfirst($option) }}</option>
+                        @endforeach
+                    </select>
+                    <!-- Notification Trigger -->
+                    <div class="mt-4">
+                        <label for="notificationTrigger" class="block text-sm font-medium text-gray-700">
+                            {{ ucfirst($notificationMethod) }} Address/URL
+                        </label>
+                        <input
+                            id="notificationTrigger"
+                            type="text"
+                            wire:model.defer="notificationTrigger"
+                            class="block w-full mt-1 border-gray-300 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                            placeholder="Enter your {{ $notificationMethod }} address or URL"
+                        />
+                        @error('notificationTrigger')
+                        <span class="text-red-600 text-sm">{{ $message }}</span>
+                        @enderror
+                    </div>
+                    <!-- Select Branches -->
+                    <div class="mt-4">
+                        <label for="branches" class="block text-sm font-medium text-gray-700">Select Branches</label>
+                        <div
+                            class="relative"
+                            x-data="{ open: @entangle('showBranchesDropdown') }" {{-- Alpine.js for dropdown toggle --}}
+                            x-on:click.outside="open = false" {{-- Close when clicking outside --}}
+                        >
                             <button
-                                id="branchesDropdown"
                                 type="button"
-                                class="w-full bg-white flex justify-between items-center px-4 py-2 text-sm text-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                                wire:click="$toggle('showBranchesDropdown')"
+                                class="w-full bg-white flex justify-between items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                x-on:click="open = !open" {{-- Toggle dropdown --}}
                             >
                                 <span>{{ count($selectedBranches) > 0 ? implode(', ', $selectedBranches) : 'Select branches...' }}</span>
                                 <svg class="w-5 h-5 text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
                                 </svg>
                             </button>
-                            @if ($showBranchesDropdown)
-                                <div class="absolute z-10 mt-2 bg-white border border-gray-300 rounded-lg shadow-lg max-h-48 overflow-auto">
-                                    <ul class="py-1 text-sm text-gray-700">
-                                        @foreach ($availableBranches as $branch)
-                                            <li wire:model="selectedBranches" value="{{ $branch }}" class="px-4 py-2 cursor-pointer hover:bg-indigo-100 flex items-center">
-                                                <input
-                                                    type="checkbox"
-                                                    value="{{ $branch }}"
-                                                    wire:model="selectedBranches"
-                                                    class="mr-2 text-indigo-500 focus:ring-indigo-500 border-gray-300 rounded"
-                                                />
-                                                <span>{{ $branch }}</span>
-                                            </li>
-                                        @endforeach
-                                    </ul>
-                                </div>
-                            @endif
+
+                            <div
+                                x-show="open"
+                                class="absolute z-10 mt-2 bg-white border border-gray-300 rounded-lg shadow-lg max-h-48 overflow-auto w-full"
+                                style="display: none;" {{-- Hide initially --}}
+                            >
+                                <ul class="py-1 text-sm text-gray-700">
+                                    @foreach ($availableBranches as $branch)
+                                        <li
+                                            class="px-4 py-2 cursor-pointer hover:bg-indigo-100 flex items-center"
+                                            wire:click="toggleBranch('{{ $branch }}')" {{-- Select branch when clicking on li --}}
+                                        >
+                                            <input
+                                                type="checkbox"
+                                                value="{{ $branch }}"
+                                                wire:model="selectedBranches"
+                                                class="mr-2 text-indigo-500 focus:ring-indigo-500 border-gray-300 rounded pointer-events-none"
+                                            />
+                                            <span>{{ $branch }}</span>
+                                        </li>
+                                    @endforeach
+                                </ul>
+                            </div>
                         </div>
+                        @error('selectedBranches')
+                        <span class="text-red-600 text-sm">{{ $message }}</span>
+                        @enderror
                     </div>
-                    @error('selectedBranches')
-                    <span class="text-red-600 text-sm">{{ $message }}</span>
-                    @enderror
-                    <p class="text-sm text-gray-500 mt-2">
-                        Click the dropdown to select one or more branches.
-                    </p>
                 </div>
+                <!-- Modal Footer -->
                 <div class="mt-6 flex justify-end">
-                    <button
-                        wire:click="$set('showModal', false)"
-                        class="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 mr-3"
-                    >
+                    <button wire:click="$set('showModal', false)" class="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 mr-3">
                         Cancel
                     </button>
-                    <button
-                        wire:click="toggleFavorite"
-                        class="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
-                    >
+                    <button wire:click="toggleFavorite" class="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600">
                         Save
                     </button>
                 </div>
